@@ -1,28 +1,136 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Icon from '@/components/ui/icon';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/hooks/use-toast';
 
 type Screen = 'welcome' | 'chats' | 'chat' | 'contacts' | 'favorites' | 'profile' | 'settings';
+
+interface Message {
+  id: number;
+  text: string;
+  sent: boolean;
+  time: string;
+  type?: 'text' | 'image' | 'video' | 'file';
+  fileName?: string;
+  fileUrl?: string;
+}
+
+interface Chat {
+  id: number;
+  name: string;
+  lastMessage: string;
+  time: string;
+  unread: number;
+  avatar: string;
+  online: boolean;
+}
 
 const Index = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>('welcome');
   const [selectedChat, setSelectedChat] = useState<number | null>(null);
+  const [messages, setMessages] = useState<Message[]>([
+    { id: 1, text: 'Привет! Как дела?', sent: false, time: '14:20', type: 'text' },
+    { id: 2, text: 'Отлично! А у тебя?', sent: true, time: '14:25', type: 'text' },
+    { id: 3, text: 'Давай встретимся завтра!', sent: false, time: '14:32', type: 'text' },
+  ]);
+  const [messageText, setMessageText] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showVideoCall, setShowVideoCall] = useState(false);
+  const [contacts, setContacts] = useState([
+    { id: 1, name: 'Анна Смирнова', avatar: '👩', phone: '+7 (999) 123-45-67', online: true },
+    { id: 2, name: 'Иван Петров', avatar: '👨', phone: '+7 (999) 234-56-78', online: false },
+    { id: 3, name: 'Мария Кузнецова', avatar: '👩‍🦰', phone: '+7 (999) 345-67-89', online: true },
+    { id: 5, name: 'Дмитрий Волков', avatar: '👨‍💼', phone: '+7 (999) 456-78-90', online: false },
+    { id: 6, name: 'Елена Морозова', avatar: '👩‍💻', phone: '+7 (999) 567-89-01', online: true },
+  ]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
-  const mockChats = [
+  const [chats, setChats] = useState<Chat[]>([
     { id: 1, name: 'Анна Смирнова', lastMessage: 'Давай встретимся завтра!', time: '14:32', unread: 2, avatar: '👩', online: true },
     { id: 2, name: 'Иван Петров', lastMessage: 'Отправил тебе файлы', time: '12:15', unread: 0, avatar: '👨', online: false },
     { id: 3, name: 'Мария Кузнецова', lastMessage: '😊 Спасибо большое!', time: 'Вчера', unread: 0, avatar: '👩‍🦰', online: true },
     { id: 4, name: 'Команда проекта', lastMessage: 'Созвон перенесли на 15:00', time: 'Вчера', unread: 5, avatar: '👥', online: false },
-  ];
+  ]);
 
-  const mockMessages = [
-    { id: 1, text: 'Привет! Как дела?', sent: false, time: '14:20' },
-    { id: 2, text: 'Отлично! А у тебя?', sent: true, time: '14:25' },
-    { id: 3, text: 'Давай встретимся завтра!', sent: false, time: '14:32' },
-  ];
+  const emojis = ['😊', '😂', '❤️', '👍', '🎉', '🔥', '💯', '✨', '🚀', '💪', '🤔', '😍', '🥰', '😎', '🤗', '👏', '🙌', '💕', '⭐', '🌟'];
+
+  const handleSendMessage = () => {
+    if (messageText.trim()) {
+      const newMessage: Message = {
+        id: messages.length + 1,
+        text: messageText,
+        sent: true,
+        time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+        type: 'text'
+      };
+      setMessages([...messages, newMessage]);
+      setMessageText('');
+      
+      const updatedChats = chats.map(chat => 
+        chat.id === selectedChat 
+          ? { ...chat, lastMessage: messageText, time: 'Сейчас' }
+          : chat
+      );
+      setChats(updatedChats);
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const fileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
+      const newMessage: Message = {
+        id: messages.length + 1,
+        text: fileType === 'image' ? '📷 Фото' : fileType === 'video' ? '🎥 Видео' : `📎 ${file.name}`,
+        sent: true,
+        time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+        type: fileType,
+        fileName: file.name,
+        fileUrl: URL.createObjectURL(file)
+      };
+      setMessages([...messages, newMessage]);
+      toast({
+        title: "Файл отправлен",
+        description: `${file.name} успешно загружен`,
+      });
+    }
+  };
+
+  const handleEmojiClick = (emoji: string) => {
+    setMessageText(messageText + emoji);
+    setShowEmojiPicker(false);
+  };
+
+  const handleStartChat = (contactId: number) => {
+    const contact = contacts.find(c => c.id === contactId);
+    if (contact) {
+      const existingChat = chats.find(c => c.name === contact.name);
+      if (existingChat) {
+        setSelectedChat(existingChat.id);
+        setCurrentScreen('chat');
+      } else {
+        const newChat: Chat = {
+          id: chats.length + 1,
+          name: contact.name,
+          lastMessage: 'Начните общение',
+          time: 'Сейчас',
+          unread: 0,
+          avatar: contact.avatar,
+          online: contact.online
+        };
+        setChats([newChat, ...chats]);
+        setSelectedChat(newChat.id);
+        setMessages([]);
+        setCurrentScreen('chat');
+      }
+    }
+  };
 
   const WelcomeScreen = () => (
     <div className="min-h-screen bg-gradient-to-br from-blue-400 via-blue-500 to-blue-600 flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -81,7 +189,7 @@ const Index = () => {
       </div>
 
       <div className="px-4 pt-4 space-y-2">
-        {mockChats.map((chat) => (
+        {chats.map((chat) => (
           <div
             key={chat.id}
             onClick={() => {
@@ -119,7 +227,7 @@ const Index = () => {
   );
 
   const ChatScreen = () => {
-    const chat = mockChats.find(c => c.id === selectedChat);
+    const chat = chats.find(c => c.id === selectedChat);
     if (!chat) return null;
 
     return (
@@ -148,51 +256,211 @@ const Index = () => {
             <p className="text-xs text-gray-500">{chat.online ? 'онлайн' : 'был(а) недавно'}</p>
           </div>
           
+          <Button 
+            size="icon" 
+            variant="ghost" 
+            className="rounded-full"
+            onClick={() => setShowVideoCall(true)}
+          >
+            <Icon name="Video" size={22} className="text-blue-600" />
+          </Button>
+          
           <Button size="icon" variant="ghost" className="rounded-full">
             <Icon name="MoreVertical" size={22} />
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {mockMessages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.sent ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2`}
-            >
+        <ScrollArea className="flex-1 p-4">
+          <div className="space-y-3 pb-4">
+            {messages.map((msg) => (
               <div
-                className={`max-w-[75%] rounded-3xl px-5 py-3 shadow-md ${
-                  msg.sent
-                    ? 'bg-white text-gray-800 rounded-br-md'
-                    : 'bg-white/95 text-gray-800 rounded-bl-md'
-                }`}
+                key={msg.id}
+                className={`flex ${msg.sent ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2`}
               >
-                <p className="text-base leading-relaxed">{msg.text}</p>
-                <span className="text-xs text-gray-500 mt-1 block">{msg.time}</span>
+                <div
+                  className={`max-w-[75%] rounded-3xl px-5 py-3 shadow-md ${
+                    msg.sent
+                      ? 'bg-white text-gray-800 rounded-br-md'
+                      : 'bg-white/95 text-gray-800 rounded-bl-md'
+                  }`}
+                >
+                  {msg.type === 'image' && msg.fileUrl && (
+                    <img src={msg.fileUrl} alt="Изображение" className="rounded-2xl mb-2 max-w-full" />
+                  )}
+                  {msg.type === 'video' && msg.fileUrl && (
+                    <video src={msg.fileUrl} controls className="rounded-2xl mb-2 max-w-full" />
+                  )}
+                  <p className="text-base leading-relaxed">{msg.text}</p>
+                  <span className="text-xs text-gray-500 mt-1 block">{msg.time}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+
+        <div className="bg-white/90 backdrop-blur-xl p-4">
+          {showEmojiPicker && (
+            <div className="mb-3 bg-white rounded-3xl p-4 shadow-lg">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-800">Эмодзи</h3>
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  className="rounded-full h-8 w-8"
+                  onClick={() => setShowEmojiPicker(false)}
+                >
+                  <Icon name="X" size={18} />
+                </Button>
+              </div>
+              <div className="grid grid-cols-10 gap-2">
+                {emojis.map((emoji, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleEmojiClick(emoji)}
+                    className="text-2xl hover:scale-125 transition-transform p-1 rounded-lg hover:bg-blue-50"
+                  >
+                    {emoji}
+                  </button>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-
-        <div className="bg-white/90 backdrop-blur-xl p-4 flex items-center gap-3">
-          <Button size="icon" variant="ghost" className="rounded-full shrink-0">
-            <Icon name="Smile" size={24} className="text-blue-600" />
-          </Button>
+          )}
           
-          <div className="flex-1 relative">
-            <Input 
-              placeholder="Введите сообщение..."
-              className="h-12 rounded-full bg-gray-100 border-0 pl-5 pr-12"
-            />
-            <Button size="icon" variant="ghost" className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full">
-              <Icon name="Paperclip" size={20} className="text-gray-500" />
+          <div className="flex items-center gap-3">
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              className="rounded-full shrink-0"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            >
+              <Icon name="Smile" size={24} className="text-blue-600" />
+            </Button>
+            
+            <div className="flex-1 relative">
+              <Input 
+                placeholder="Введите сообщение..."
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                className="h-12 rounded-full bg-gray-100 border-0 pl-5 pr-12"
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Icon name="Paperclip" size={20} className="text-gray-500" />
+              </Button>
+            </div>
+            
+            <Button 
+              size="icon" 
+              className="rounded-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shrink-0 shadow-lg"
+              onClick={handleSendMessage}
+            >
+              <Icon name="Send" size={20} />
             </Button>
           </div>
-          
-          <Button size="icon" className="rounded-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shrink-0 shadow-lg">
-            <Icon name="Send" size={20} />
-          </Button>
         </div>
       </div>
+    );
+  };
+
+  const ContactsScreen = () => (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pb-20">
+      <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200/50 px-6 pt-6 pb-4 sticky top-0 z-10">
+        <h2 className="font-bold text-xl text-gray-800 mb-4">Контакты</h2>
+        <div className="relative">
+          <Input 
+            placeholder="Поиск контактов..." 
+            className="h-12 rounded-full bg-gray-100 border-0 pl-12 pr-4 text-base"
+          />
+          <Icon name="Search" size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+        </div>
+      </div>
+
+      <div className="px-4 pt-4 space-y-2">
+        {contacts.map((contact) => (
+          <div
+            key={contact.id}
+            className="bg-white rounded-3xl p-4 flex items-center gap-4 shadow-sm"
+          >
+            <div className="relative">
+              <Avatar className="w-14 h-14">
+                <AvatarFallback className="text-2xl">{contact.avatar}</AvatarFallback>
+              </Avatar>
+              {contact.online && (
+                <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
+              )}
+            </div>
+            
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-gray-800">{contact.name}</h3>
+              <p className="text-sm text-gray-600">{contact.phone}</p>
+            </div>
+            
+            <Button 
+              size="icon" 
+              className="rounded-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shrink-0"
+              onClick={() => handleStartChat(contact.id)}
+            >
+              <Icon name="MessageCircle" size={20} />
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const VideoCallDialog = () => {
+    const chat = chats.find(c => c.id === selectedChat);
+    
+    return (
+      <Dialog open={showVideoCall} onOpenChange={setShowVideoCall}>
+        <DialogContent className="sm:max-w-md bg-gradient-to-br from-blue-500 to-blue-600 border-0 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-center text-white">Видеозвонок</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-6 py-6">
+            <Avatar className="w-32 h-32 border-4 border-white/30">
+              <AvatarFallback className="text-6xl bg-white/20">{chat?.avatar}</AvatarFallback>
+            </Avatar>
+            <div className="text-center">
+              <h3 className="text-2xl font-bold mb-2">{chat?.name}</h3>
+              <p className="text-blue-100">Идёт звонок...</p>
+            </div>
+            <div className="flex gap-4 mt-4">
+              <Button 
+                size="icon"
+                className="rounded-full w-16 h-16 bg-red-500 hover:bg-red-600"
+                onClick={() => setShowVideoCall(false)}
+              >
+                <Icon name="PhoneOff" size={28} />
+              </Button>
+              <Button 
+                size="icon"
+                className="rounded-full w-16 h-16 bg-white/20 hover:bg-white/30"
+              >
+                <Icon name="Mic" size={28} />
+              </Button>
+              <Button 
+                size="icon"
+                className="rounded-full w-16 h-16 bg-white/20 hover:bg-white/30"
+              >
+                <Icon name="Video" size={28} />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     );
   };
 
@@ -248,11 +516,12 @@ const Index = () => {
       {currentScreen === 'welcome' && <WelcomeScreen />}
       {currentScreen === 'chats' && <ChatsScreen />}
       {currentScreen === 'chat' && <ChatScreen />}
-      {currentScreen === 'contacts' && <PlaceholderScreen title="Контакты" icon="Users" />}
+      {currentScreen === 'contacts' && <ContactsScreen />}
       {currentScreen === 'favorites' && <PlaceholderScreen title="Избранное" icon="Star" />}
       {currentScreen === 'profile' && <PlaceholderScreen title="Профиль" icon="User" />}
       {currentScreen === 'settings' && <PlaceholderScreen title="Настройки" icon="Settings" />}
       <BottomNav />
+      <VideoCallDialog />
     </>
   );
 };
